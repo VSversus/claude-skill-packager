@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="cs">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <title>Skill Packager</title>
@@ -10,12 +10,15 @@
   .card { background: #1a1d27; border: 1px solid #2d3148; border-radius: 12px; padding: 36px; width: 480px; }
   h1 { font-size: 1.3rem; font-weight: 600; margin-bottom: 4px; }
   .sub { font-size: 0.85rem; color: #64748b; margin-bottom: 28px; }
+  .section + .section { margin-top: 28px; padding-top: 28px; border-top: 1px solid #2d3148; }
+  .section h2 { font-size: 0.98rem; font-weight: 600; margin-bottom: 4px; }
+  .section .sub { margin-bottom: 16px; }
   .drop { border: 2px dashed #2d3148; border-radius: 8px; padding: 40px 20px; text-align: center; cursor: pointer; transition: all .2s; color: #64748b; }
   .drop:hover { border-color: #6366f1; background: #1e2035; color: #a5b4fc; }
   .drop svg { margin-bottom: 12px; }
   .drop p { font-size: 0.9rem; }
   .drop small { font-size: 0.75rem; opacity: .7; }
-  #fileinput { display: none; }
+  #fileinput, #skillFileInput { display: none; }
   .files { margin-top: 20px; display: none; }
   .files-header { font-size: 0.78rem; color: #64748b; margin-bottom: 8px; }
   .file-list { background: #12141e; border-radius: 6px; padding: 10px 14px; max-height: 160px; overflow-y: auto; font-size: 0.78rem; color: #94a3b8; line-height: 1.8; }
@@ -31,29 +34,56 @@
 <body>
 <div class="card">
   <h1>📦 Skill Packager</h1>
-  <p class="sub">Převede složku se skillem na <code>.skill</code> soubor</p>
+  <p class="sub">Pack a folder into a <code>.skill</code> file or unpack an existing <code>.skill</code> archive</p>
 
-  <div class="drop" id="drop">
-    <svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-      <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/>
-    </svg>
-    <p>Klikni pro výběr složky se skillem</p>
-    <small>vybere celou složku včetně podsložek</small>
-    <input type="file" id="fileinput" webkitdirectory multiple>
+  <div class="section">
+    <h2>Pack folder</h2>
+    <p class="sub">Convert a skill folder into a <code>.skill</code> file</p>
+
+    <div class="drop" id="drop">
+      <svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/>
+      </svg>
+      <p>Click to select a skill folder</p>
+      <small>selects the full folder including subfolders</small>
+      <input type="file" id="fileinput" webkitdirectory multiple>
+    </div>
+
+    <div class="files" id="filesSection">
+      <div class="files-header" id="filesHeader"></div>
+      <div class="file-list" id="fileList"></div>
+    </div>
+
+    <button class="btn" id="packBtn">Pack and download .skill</button>
+    <div class="status" id="status"></div>
   </div>
 
-  <div class="files" id="filesSection">
-    <div class="files-header" id="filesHeader"></div>
-    <div class="file-list" id="fileList"></div>
-  </div>
+  <div class="section">
+    <h2>Unpack .skill</h2>
+    <p class="sub">Open a downloaded Claude skill and extract its contents</p>
 
-  <button class="btn" id="packBtn">Zabalit a stáhnout .skill</button>
-  <div class="status" id="status"></div>
+    <div class="drop" id="skillDrop">
+      <svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 12h-15m0 0l4.5-4.5M4.5 12l4.5 4.5M21 18.75V5.25A2.25 2.25 0 0018.75 3H5.25A2.25 2.25 0 003 5.25v13.5A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75z"/>
+      </svg>
+      <p>Click to select a .skill file</p>
+      <small>if the browser supports folder write access, it extracts directly to disk</small>
+      <input type="file" id="skillFileInput" accept=".skill,application/zip">
+    </div>
+
+    <div class="files" id="unpackFilesSection">
+      <div class="files-header" id="unpackFilesHeader"></div>
+      <div class="file-list" id="unpackFileList"></div>
+    </div>
+
+    <button class="btn" id="unpackBtn">Unpack .skill</button>
+    <div class="status" id="unpackStatus"></div>
+  </div>
 </div>
 
 <script>
 const EXCLUDE_DIRS = new Set(['__pycache__', 'node_modules', 'evals', '.git']);
-const EXCLUDE_FILES = new Set(['.DS_Store', 'skill-packager.html']);
+const EXCLUDE_FILES = new Set(['.DS_Store']);
 const EXCLUDE_GLOBS = [/\.pyc$/, /\.skill$/];
 
 function shouldExclude(relPath) {
@@ -72,6 +102,8 @@ function shouldExclude(relPath) {
 
 let collectedFiles = [];
 let skillName = '';
+let selectedSkillArchive = null;
+let unpackEntries = [];
 
 const drop = document.getElementById('drop');
 const fileinput = document.getElementById('fileinput');
@@ -80,9 +112,86 @@ const status = document.getElementById('status');
 const filesSection = document.getElementById('filesSection');
 const fileList = document.getElementById('fileList');
 const filesHeader = document.getElementById('filesHeader');
+const skillDrop = document.getElementById('skillDrop');
+const skillFileInput = document.getElementById('skillFileInput');
+const unpackBtn = document.getElementById('unpackBtn');
+const unpackStatus = document.getElementById('unpackStatus');
+const unpackFilesSection = document.getElementById('unpackFilesSection');
+const unpackFileList = document.getElementById('unpackFileList');
+const unpackFilesHeader = document.getElementById('unpackFilesHeader');
 
 drop.addEventListener('click', () => fileinput.click());
 fileinput.addEventListener('change', () => handleFiles(fileinput.files));
+skillDrop.addEventListener('click', () => skillFileInput.click());
+skillFileInput.addEventListener('change', () => handleSkillArchive(skillFileInput.files[0]));
+
+function setStatus(element, message, mode = '') {
+  element.textContent = message;
+  element.className = `status${mode ? ' ' + mode : ''}`;
+}
+
+function triggerDownload(blob, fileName) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function getArchiveBaseName(fileName) {
+  return fileName.replace(/\.skill$/i, '') || 'skill';
+}
+
+function createNestedFolder(rootHandle, parts) {
+  return parts.reduce(
+    (promise, part) => promise.then(handle => handle.getDirectoryHandle(part, { create: true })),
+    Promise.resolve(rootHandle)
+  );
+}
+
+async function extractToDirectory(baseName, zip) {
+  if (!window.showDirectoryPicker) return false;
+
+  const targetRoot = await window.showDirectoryPicker({ mode: 'readwrite' });
+  const skillDir = await targetRoot.getDirectoryHandle(baseName, { create: true });
+  const basePath = baseName.replace(/^\/+|\/+$/g, '');
+  const stripBaseFolder = basePath && unpackEntries.every(entry => {
+    const name = entry.name.replace(/\\/g, '/').replace(/^\/+/, '').replace(/\/+$/g, '');
+    return name === basePath || name.startsWith(basePath + '/');
+  });
+
+  for (const entry of unpackEntries) {
+    let normalizedPath = entry.name.replace(/\\/g, '/').replace(/^\/+/, '');
+    if (stripBaseFolder) {
+      if (normalizedPath === basePath || normalizedPath === `${basePath}/`) continue;
+      normalizedPath = normalizedPath.slice(basePath.length + 1);
+    }
+
+    const parts = normalizedPath.split('/').filter(Boolean);
+    if (!parts.length) continue;
+
+    if (entry.dir) {
+      await createNestedFolder(skillDir, parts);
+      continue;
+    }
+
+    const fileName = parts.pop();
+    const parentDir = parts.length ? await createNestedFolder(skillDir, parts) : skillDir;
+    const fileHandle = await parentDir.getFileHandle(fileName, { create: true });
+    const writable = await fileHandle.createWritable();
+    const content = await entry.async('uint8array');
+    await writable.write(content);
+    await writable.close();
+  }
+
+  return true;
+}
+
+async function downloadAsZip(baseName, zip) {
+  const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+  triggerDownload(blob, `${baseName}.zip`);
+}
 
 function handleFiles(files) {
   collectedFiles = Array.from(files);
@@ -111,7 +220,7 @@ function handleFiles(files) {
   console.log('hasMd:', hasMd);
   collectedFiles.forEach(f => console.log('  webkitRelativePath:', f.webkitRelativePath, '| name:', f.name));
 
-  filesHeader.textContent = `${included.length} souborů bude přidáno, ${skipped.length} přeskočeno`;
+  filesHeader.textContent = `${included.length} files will be included, ${skipped.length} skipped`;
   fileList.innerHTML = [
     ...included.map(p => `<div>✓ ${p}</div>`),
     ...skipped.map(p => `<div class="skipped">✗ ${p}</div>`)
@@ -121,18 +230,59 @@ function handleFiles(files) {
   packBtn.style.display = 'block';
 
   if (!hasMd) {
-    status.textContent = '⚠️ SKILL.md nenalezeno — zkontroluj správnou složku';
-    status.className = 'status err';
+    setStatus(status, '⚠️ SKILL.md not found — please check that you selected the correct folder', 'err');
   } else {
-    status.textContent = `Připraveno: ${skillName}`;
-    status.className = 'status';
+    setStatus(status, `Ready: ${skillName}`);
+  }
+}
+
+async function handleSkillArchive(file) {
+  selectedSkillArchive = file || null;
+  unpackEntries = [];
+
+  if (!selectedSkillArchive) {
+    unpackFilesSection.style.display = 'none';
+    unpackBtn.style.display = 'none';
+    setStatus(unpackStatus, '');
+    return;
+  }
+
+  unpackBtn.disabled = true;
+  setStatus(unpackStatus, 'Loading archive contents...');
+
+  try {
+    const zip = await JSZip.loadAsync(selectedSkillArchive);
+    unpackEntries = Object.values(zip.files).sort((a, b) => a.name.localeCompare(b.name));
+
+    if (!unpackEntries.length) {
+      throw new Error('Archive is empty');
+    }
+
+    unpackFilesHeader.textContent = `${unpackEntries.length} entries ready to extract`;
+    unpackFileList.innerHTML = unpackEntries.map(entry => {
+      const icon = entry.dir ? '📁' : '📄';
+      return `<div>${icon} ${entry.name}</div>`;
+    }).join('');
+
+    unpackFilesSection.style.display = 'block';
+    unpackBtn.style.display = 'block';
+    unpackBtn.disabled = false;
+    setStatus(
+      unpackStatus,
+      window.showDirectoryPicker
+        ? 'Ready to extract into your selected folder'
+        : 'Ready — your browser will download the contents as .zip'
+    );
+  } catch (err) {
+    unpackFilesSection.style.display = 'none';
+    unpackBtn.style.display = 'none';
+    setStatus(unpackStatus, '❌ Invalid .skill archive: ' + err.message, 'err');
   }
 }
 
 packBtn.addEventListener('click', async () => {
   packBtn.disabled = true;
-  status.textContent = 'Balím...';
-  status.className = 'status';
+  setStatus(status, 'Packing...');
 
   try {
     const zip = new JSZip();
@@ -145,21 +295,42 @@ packBtn.addEventListener('click', async () => {
     }
 
     const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${skillName}.skill`;
-    a.click();
-    URL.revokeObjectURL(url);
+    triggerDownload(blob, `${skillName}.skill`);
 
-    status.textContent = `✅ ${skillName}.skill stažen!`;
-    status.className = 'status ok';
+    setStatus(status, `✅ ${skillName}.skill downloaded!`, 'ok');
   } catch (err) {
-    status.textContent = '❌ Chyba: ' + err.message;
-    status.className = 'status err';
+    setStatus(status, '❌ Error: ' + err.message, 'err');
   }
 
   packBtn.disabled = false;
+});
+
+unpackBtn.addEventListener('click', async () => {
+  if (!selectedSkillArchive) return;
+
+  unpackBtn.disabled = true;
+  setStatus(unpackStatus, 'Extracting...');
+
+  try {
+    const zip = await JSZip.loadAsync(selectedSkillArchive);
+    const baseName = getArchiveBaseName(selectedSkillArchive.name);
+    const extractedToFolder = await extractToDirectory(baseName, zip);
+
+    if (extractedToFolder) {
+      setStatus(unpackStatus, `✅ Extracted to folder ${baseName}`, 'ok');
+    } else {
+      await downloadAsZip(baseName, zip);
+      setStatus(unpackStatus, `✅ Contents downloaded as ${baseName}.zip`, 'ok');
+    }
+  } catch (err) {
+    if (err && err.name === 'AbortError') {
+      setStatus(unpackStatus, 'Folder selection was canceled', 'err');
+    } else {
+      setStatus(unpackStatus, '❌ Extraction error: ' + err.message, 'err');
+    }
+  }
+
+  unpackBtn.disabled = false;
 });
 </script>
 </body>
